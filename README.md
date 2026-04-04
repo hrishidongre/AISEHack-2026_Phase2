@@ -1,76 +1,248 @@
-# PM2.5 Pollution Forecasting - Master Blend
+# 🌫️ PM2.5 Pollution Forecasting
 
-**ANRF AI-SE Hack Phase 2 | Theme 2**  
-**Score: 0.8825**
+<div align="center">
+
+**Master Blend Pipeline for Episode-Aware Air Quality Prediction**
+
+[![Competition](https://img.shields.io/badge/ANRF_AI--SE_Hack-Phase_2-4361ee?style=for-the-badge)](https://anrfonline.in)
+[![Score](https://img.shields.io/badge/Score-0.8825-06d6a0?style=for-the-badge)](https://kaggle.com)
+[![Theme](https://img.shields.io/badge/Theme_2-Pollution_Forecasting-ff6b6b?style=for-the-badge)](https://kaggle.com)
 
 ---
 
-## About
+*Predicting 16 hours of PM2.5 concentrations from 10 hours of meteorological data*
 
-This notebook predicts 16 hours of PM2.5 concentrations from 10 hours of meteorological input over a 140×124 grid covering India. It uses a **Master Blend** strategy combining two model experts for balanced predictions.
+</div>
 
 ---
 
-## Method
+## 📋 Table of Contents
 
-### Model: ResGRU-UNet
+- [Overview](#-overview)
+- [Architecture](#-architecture)
+- [Training Strategy](#-training-strategy)
+- [Master Blend Inference](#-master-blend-inference)
+- [Input Features](#-input-features)
+- [Results](#-results)
+- [Requirements](#-requirements)
 
-- Encoder-decoder architecture with ConvGRU in the bottleneck
-- Autoregressive: runs decoder 16 times for 16-hour forecast
-- Predicts residuals in log-space from the last input frame
+---
 
-### Training: Pure Quantile Refinement (PQR)
+## 🎯 Overview
 
-Starting from Phase 3 checkpoint (score 0.8803), fine-tunes with:
+This solution tackles the challenge of forecasting PM2.5 pollution levels with special emphasis on **episodic events** (extreme pollution spikes). The approach combines two specialized model experts:
 
-- **Loss**: 100% Pinball at q=0.85 (no Huber)
-- **LR**: 1e-5
-- **Epochs**: 5 with early stopping (patience=3)
+<div align="center">
 
-Pinball loss at q=0.85 penalizes under-prediction of high values ~5.7× more than over-prediction.
+| 🏛️ Stable Expert | ⚡ Spike Expert |
+|:---:|:---:|
+| Maintains global accuracy | Captures extreme peaks |
+| Weight: **30%** | Weight: **70%** |
 
-### Inference: Master Blend
+</div>
 
-Combines two experts:
+---
 
-| Expert | Weight | Purpose |
-|--------|--------|---------|
-| Stable (Phase 2) | 0.30 | Keeps global SMAPE low |
-| Spike (PQR) | 0.70 | Captures episode peaks |
+## 🏗️ Architecture
 
-After blending, applies **Curvature Correction** on peaks > 100 µg/m³:
+### ResGRU-UNet
+
 ```
-stretch = 1 + (pred/1000)²
+┌─────────────────────────────────────────────────────────────┐
+│                         INPUT                                │
+│              (Batch, 16 channels, 10 hours, 140, 124)       │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       ENCODER                                │
+│  ┌─────────┐      ┌─────────┐      ┌─────────┐              │
+│  │ Block 1 │ ───► │ Block 2 │ ───► │ Block 3 │              │
+│  │  64 ch  │      │ 128 ch  │      │ 256 ch  │              │
+│  └─────────┘      └─────────┘      └─────────┘              │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    BOTTLENECK                                │
+│                                                              │
+│                 ┌──────────────┐                            │
+│                 │   ConvGRU    │ ◄─── Runs 16× autoregressive│
+│                 │  256 hidden  │                            │
+│                 └──────────────┘                            │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       DECODER                                │
+│  ┌─────────┐      ┌─────────┐      ┌─────────┐              │
+│  │ Block 1 │ ◄─── │ Block 2 │ ◄─── │ Block 3 │              │
+│  │  32 ch  │      │  64 ch  │      │ 128 ch  │              │
+│  └─────────┘      └─────────┘      └─────────┘              │
+│        ↑               ↑               ↑                     │
+│        └───────────────┴───────────────┘                     │
+│              Skip Connections (U-Net style)                  │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                        OUTPUT                                │
+│              (Batch, 16 hours, 140, 124)                    │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Features
+## 🎓 Training Strategy
 
-16 input channels (13 base + 3 engineered):
+### Pure Quantile Refinement (PQR)
 
-- **Meteorological**: cpm25, q2, t2, u10, v10, pblh, psfc, swdown, rain
-- **Emissions**: PM25, NOx, SO2, NH3
-- **Engineered**: wind_speed, hour_sin, hour_cos
+<div align="center">
+
+| Parameter | Value |
+|:---------:|:-----:|
+| 📉 Loss | 100% Pinball (q=0.85) |
+| 📈 Learning Rate | 1e-5 |
+| 🔄 Epochs | 5 |
+| ⏱️ Early Stopping | Patience = 3 |
+| 📦 Batch Size | 4 |
+
+</div>
+
+#### Why Pinball Loss at q=0.85?
+
+```
+Under-prediction penalty:  0.85 × |error|  ████████░░
+Over-prediction penalty:   0.15 × |error|  ██░░░░░░░░
+
+Asymmetry ratio: 5.67×
+```
+
+> 💡 This forces the model to **prefer over-prediction** for extreme values, directly optimizing for Episode SMAPE.
 
 ---
 
-## Output
+## 🔮 Master Blend Inference
 
-- **Shape**: (218, 140, 124, 16)
-- **Range**: [0.0, 6161.3] µg/m³
-- **Mean**: 42.6 µg/m³
+```
+                    ┌─────────────────┐
+                    │   Test Input    │
+                    │  (218 samples)  │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┴──────────────┐
+              │                             │
+              ▼                             ▼
+     ┌────────────────┐            ┌────────────────┐
+     │ 🏛️ Stable Expert│            │ ⚡ Spike Expert │
+     │   (Phase 2)    │            │     (PQR)      │
+     │  Score: 0.8768 │            │  Score: 0.8803 │
+     └───────┬────────┘            └───────┬────────┘
+             │                             │
+             │ × 0.30                      │ × 0.70
+             │                             │
+             └──────────────┬──────────────┘
+                            │
+                            ▼
+                   ┌────────────────┐
+                   │    BLEND       │
+                   │  0.3S + 0.7P   │
+                   └───────┬────────┘
+                           │
+                           ▼
+                   ┌────────────────┐
+                   │   CURVATURE    │
+                   │  CORRECTION    │
+                   │  (peaks >100)  │
+                   └───────┬────────┘
+                           │
+                           ▼
+                   ┌────────────────┐
+                   │ 📤 Final Output │
+                   │ [0.0, 6161.3]  │
+                   │  mean = 42.6   │
+                   └────────────────┘
+```
+
+### Curvature Correction Formula
+
+```python
+stretch = 1 + (pred / 1000)²
+```
+
+| Prediction | Correction | Boost |
+|:----------:|:----------:|:-----:|
+| 100 µg/m³  | × 1.01     | +1%   |
+| 300 µg/m³  | × 1.09     | +9%   |
+| 500 µg/m³  | × 1.25     | +25%  |
+| 1000 µg/m³ | × 2.00     | +100% |
 
 ---
 
-## Requirements
+## 📊 Input Features
 
-- PyTorch 2.0+
-- NumPy
-- CUDA GPU
+<div align="center">
+
+### 16 Channels = 13 Base + 3 Engineered
+
+</div>
+
+| Category | Features | Count |
+|:--------:|:---------|:-----:|
+| 🎯 **Target** | `cpm25` (Chemical PM2.5) | 1 |
+| 🌡️ **Meteorological** | `q2` `t2` `pblh` `psfc` `swdown` `rain` | 6 |
+| 💨 **Wind** | `u10` `v10` | 2 |
+| 🏭 **Emissions** | `PM25` `NOx` `SO2` `NH3` | 4 |
+| ⚙️ **Engineered** | `wind_speed` `hour_sin` `hour_cos` | 3 |
 
 ---
 
-## License
+## 📈 Results
 
-ANRF Open License
+<div align="center">
+
+### Final Performance
+
+| Metric | Value |
+|:------:|:-----:|
+| 🏆 **Kaggle Score** | **0.8825** |
+| 📉 Val Episode SMAPE | 0.1131 |
+| 📈 Val Episode Corr | 0.9865 |
+
+### Output Statistics
+
+| Property | Value |
+|:--------:|:-----:|
+| 📐 Shape | `(218, 140, 124, 16)` |
+| 📏 Range | `[0.0, 6161.3]` µg/m³ |
+| 📊 Mean | `42.6` µg/m³ |
+| 🔧 Pixels Corrected | 11.37% |
+
+</div>
+
+---
+
+## ⚙️ Requirements
+
+```
+torch >= 2.0
+numpy >= 1.24
+```
+
+**Hardware:** NVIDIA Tesla T4 (16GB) or equivalent
+
+---
+
+## 📄 License
+
+<div align="center">
+
+**ANRF Open License**
+
+*AI-SE Hack 2026*
+
+---
+
+Made with 💨 for cleaner air
+
+</div>
