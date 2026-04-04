@@ -1,4 +1,4 @@
-# 🌫️ PM2.5 Pollution Forecasting
+# PM2.5 Pollution Forecasting
 
 <div align="center">
 
@@ -28,13 +28,13 @@
 
 ---
 
-## 🎯 Overview
+## Overview
 
 This solution tackles the challenge of forecasting PM2.5 pollution levels with special emphasis on **episodic events** (extreme pollution spikes). The approach combines two specialized model experts:
 
 <div align="center">
 
-| 🏛️ Stable Expert | ⚡ Spike Expert |
+| Stable Expert | Spike Expert |
 |:---:|:---:|
 | Maintains global accuracy | Captures extreme peaks |
 | Weight: **30%** | Weight: **70%** |
@@ -43,7 +43,7 @@ This solution tackles the challenge of forecasting PM2.5 pollution levels with s
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ### ResGRU-UNet
 
@@ -93,7 +93,7 @@ This solution tackles the challenge of forecasting PM2.5 pollution levels with s
 
 ---
 
-## 🎓 Training Strategy
+## Training Strategy
 
 ### Pure Quantile Refinement (PQR)
 
@@ -101,11 +101,11 @@ This solution tackles the challenge of forecasting PM2.5 pollution levels with s
 
 | Parameter | Value |
 |:---------:|:-----:|
-| 📉 Loss | 100% Pinball (q=0.85) |
-| 📈 Learning Rate | 1e-5 |
-| 🔄 Epochs | 5 |
-| ⏱️ Early Stopping | Patience = 3 |
-| 📦 Batch Size | 4 |
+|  Loss | 100% Pinball (q=0.85) |
+|  Learning Rate | 1e-5 |
+|  Epochs | 5 |
+|  Early Stopping | Patience = 3 |
+|  Batch Size | 4 |
 
 </div>
 
@@ -118,11 +118,11 @@ Over-prediction penalty:   0.15 × |error|  ██░░░░░░░░
 Asymmetry ratio: 5.67×
 ```
 
-> 💡 This forces the model to **prefer over-prediction** for extreme values, directly optimizing for Episode SMAPE.
+>  This forces the model to **prefer over-prediction** for extreme values, directly optimizing for Episode SMAPE.
 
 ---
 
-## 🔮 Master Blend Inference
+##  Master Blend Inference
 
 ```
                     ┌─────────────────┐
@@ -134,7 +134,7 @@ Asymmetry ratio: 5.67×
               │                             │
               ▼                             ▼
      ┌────────────────┐            ┌────────────────┐
-     │ 🏛️ Stable Expert│            │ ⚡ Spike Expert │
+     │  Stable Expert│            │  Spike Expert │
      │   (Phase 2)    │            │     (PQR)      │
      │  Score: 0.8768 │            │  Score: 0.8803 │
      └───────┬────────┘            └───────┬────────┘
@@ -158,7 +158,7 @@ Asymmetry ratio: 5.67×
                            │
                            ▼
                    ┌────────────────┐
-                   │ 📤 Final Output │
+                   │  Final Output │
                    │ [0.0, 6161.3]  │
                    │  mean = 42.6   │
                    └────────────────┘
@@ -179,7 +179,7 @@ stretch = 1 + (pred / 1000)²
 
 ---
 
-## 📊 Input Features
+##  Input Features
 
 <div align="center">
 
@@ -189,15 +189,15 @@ stretch = 1 + (pred / 1000)²
 
 | Category | Features | Count |
 |:--------:|:---------|:-----:|
-| 🎯 **Target** | `cpm25` (Chemical PM2.5) | 1 |
-| 🌡️ **Meteorological** | `q2` `t2` `pblh` `psfc` `swdown` `rain` | 6 |
-| 💨 **Wind** | `u10` `v10` | 2 |
-| 🏭 **Emissions** | `PM25` `NOx` `SO2` `NH3` | 4 |
-| ⚙️ **Engineered** | `wind_speed` `hour_sin` `hour_cos` | 3 |
+|  **Target** | `cpm25` (Chemical PM2.5) | 1 |
+|  **Meteorological** | `q2` `t2` `pblh` `psfc` `swdown` `rain` | 6 |
+|  **Wind** | `u10` `v10` | 2 |
+|  **Emissions** | `PM25` `NOx` `SO2` `NH3` | 4 |
+|  **Engineered** | `wind_speed` `hour_sin` `hour_cos` | 3 |
 
 ---
 
-## 📈 Results
+##  Results
 
 <div align="center">
 
@@ -205,24 +205,24 @@ stretch = 1 + (pred / 1000)²
 
 | Metric | Value |
 |:------:|:-----:|
-| 🏆 **Kaggle Score** | **0.8825** |
-| 📉 Val Episode SMAPE | 0.1131 |
-| 📈 Val Episode Corr | 0.9865 |
+|  **Kaggle Score** | **0.8825** |
+|  Val Episode SMAPE | 0.1131 |
+|  Val Episode Corr | 0.9865 |
 
 ### Output Statistics
 
 | Property | Value |
 |:--------:|:-----:|
-| 📐 Shape | `(218, 140, 124, 16)` |
-| 📏 Range | `[0.0, 6161.3]` µg/m³ |
-| 📊 Mean | `42.6` µg/m³ |
-| 🔧 Pixels Corrected | 11.37% |
+|  Shape | `(218, 140, 124, 16)` |
+|  Range | `[0.0, 6161.3]` µg/m³ |
+|  Mean | `42.6` µg/m³ |
+|  Pixels Corrected | 11.37% |
 
 </div>
 
 ---
 
-## ⚙️ Requirements
+##  Requirements
 
 ```
 torch >= 2.0
@@ -233,7 +233,7 @@ numpy >= 1.24
 
 ---
 
-## 📄 License
+##  License
 
 <div align="center">
 
@@ -243,6 +243,6 @@ numpy >= 1.24
 
 ---
 
-Made with 💨 for cleaner air
+Made with  for cleaner air
 
 </div>
