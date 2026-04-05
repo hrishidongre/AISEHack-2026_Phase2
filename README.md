@@ -251,15 +251,11 @@ We combine two specialized models for robust predictions:
 
 ### Final Leaderboard Performance
 
-<div align="center">
-
 | Metric | Top Model | Model 2 |
 |:------:|:---------:|:-------:|
 | **Kaggle Score** | **0.8834** | 0.8825 |
 | Val Episode SMAPE | 0.1296 | 0.1131 |
 | Val Episode Corr | 0.9856 | 0.9865 |
-
-</div>
 
 ### Output Statistics
 
@@ -323,12 +319,8 @@ numpy >= 1.24
 
 This work is released under the **ANRF Open License** as part of the AI-SE Hack 2026 competition.
 
-<div align="center">
-
 ---
 
 **Team Code4CleanAir**  
 ANRF AI-SE Hack Phase 2 - Theme 2  
 April 2026
-
-</div>
