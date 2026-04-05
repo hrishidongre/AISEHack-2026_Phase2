@@ -2,15 +2,18 @@
 
 <div align="center">
 
-**Master Blend Pipeline for Episode-Aware Air Quality Prediction**
+**Episode-Aware Air Quality Prediction using Dual-Expert Ensemble**
 
 [![Competition](https://img.shields.io/badge/ANRF_AI--SE_Hack-Phase_2-4361ee?style=for-the-badge)](https://anrfonline.in)
-[![Score](https://img.shields.io/badge/Score-0.8825-06d6a0?style=for-the-badge)](https://kaggle.com)
+[![Best Score](https://img.shields.io/badge/Best_Score-0.8834-06d6a0?style=for-the-badge)](https://kaggle.com)
 [![Theme](https://img.shields.io/badge/Theme_2-Pollution_Forecasting-ff6b6b?style=for-the-badge)](https://kaggle.com)
 
 ---
 
-*Predicting 16 hours of PM2.5 concentrations from 10 hours of meteorological data*
+*Forecasting 16 hours of PM2.5 concentrations from 10 hours of meteorological data*  
+*with emphasis on extreme pollution episodes*
+
+**Team Code4CleanAir**
 
 </div>
 
@@ -18,213 +21,284 @@
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Architecture](#architecture)
+- [Problem Statement](#problem-statement)
+- [Our Approach](#our-approach)
+- [Model Architecture](#model-architecture)
 - [Training Strategy](#training-strategy)
-- [Master Blend Inference](#master-blend-inference)
-- [Input Features](#input-features)
+- [Inference Pipeline](#inference-pipeline)
 - [Results](#results)
-- [Requirements](#requirements)
+- [Repository Structure](#repository-structure)
+- [License](#license)
 
 ---
 
-## Overview
+## Problem Statement
 
-This solution tackles the challenge of forecasting PM2.5 pollution levels with special emphasis on **episodic events** (extreme pollution spikes). The approach combines two specialized model experts:
+Predict PM2.5 concentrations for the next **16 hours** given **10 hours** of historical meteorological and emissions data over a **140x124 spatial grid** (WRF-Chem domain over Delhi-NCR region).
 
-<div align="center">
+**Key Challenge:** Accurately capture **episodic events** - sudden pollution spikes that are critical for public health warnings but inherently difficult to predict due to their extreme and rare nature.
 
-| Stable Expert | Spike Expert |
-|:---:|:---:|
-| Maintains global accuracy | Captures extreme peaks |
-| Weight: **30%** | Weight: **70%** |
-
-</div>
+**Evaluation Metric:** Episode-weighted SMAPE focusing on extreme pollution events.
 
 ---
 
-## Architecture
+## Our Approach
+
+We developed a **multi-phase progressive training pipeline** with a dual-expert ensemble:
+
+```
+Phase 1: Base Training        -->  Global patterns learned
+Phase 2: Episodic Fine-tuning -->  "Stable Expert" (0.8768)
+Phase 3: Quantile Refinement  -->  Upper-percentile targeting
+Phase 4: Pure Quantile (PQR)  -->  "Spike Expert" for extremes
+                                          |
+                                          v
+                              Master Blend Ensemble
+                              (Stable + Spike experts)
+                                          |
+                                          v
+                              Curvature Correction
+                              (Non-linear peak boost)
+```
+
+**Core Insight:** Under-predicting extreme pollution is worse than over-predicting. We use asymmetric **Pinball Loss** to penalize under-predictions more heavily.
+
+---
+
+## Model Architecture
 
 ### ResGRU-UNet
 
+A hybrid encoder-decoder architecture combining **U-Net** spatial processing with **ConvGRU** temporal dynamics.
+
 ```
-┌──────────────────────────────────────────────────────┐
-│                        INPUT                         │
-│        (Batch, 16 channels, 10 hours, 140, 124)      │
-└──────────────────────────┬───────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────┐
-│                       ENCODER                        │
-│                                                      │
-│   ┌───────────┐      ┌───────────┐      ┌───────────┐│
-│   │  Block 1  │ ---> │  Block 2  │ ---> │  Block 3  ││
-│   │   64 ch   │      │  128 ch   │      │  256 ch   ││
-│   └───────────┘      └───────────┘      └───────────┘│
-│                                                      │
-└──────────────────────────┬───────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────┐
-│                      BOTTLENECK                      │
-│                                                      │
-│              ┌────────────────┐                      │
-│              │    ConvGRU     │ <-- Runs 16x auto-   │
-│              │   256 hidden   │     regressive       │
-│              └────────────────┘                      │
-│                                                      │
-└──────────────────────────┬───────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────┐
-│                       DECODER                        │
-│                                                      │
-│   ┌───────────┐      ┌───────────┐      ┌───────────┐│
-│   │  Block 1  │ <--- │  Block 2  │ <--- │  Block 3  ││
-│   │   32 ch   │      │   64 ch   │      │  128 ch   ││
-│   └───────────┘      └───────────┘      └───────────┘│
-│        ^                  ^                  ^       │
-│        |                  |                  |       │
-│        └──────────────────┴──────────────────┘       │
-│             Skip Connections (U-Net style)           │
-│                                                      │
-└──────────────────────────┬───────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────┐
-│                        OUTPUT                        │
-│             (Batch, 16 hours, 140, 124)              │
-└──────────────────────────────────────────────────────┘
+                    INPUT
+     (Batch, 16 channels, 10 hours, 140, 124)
+                      |
+     =================|=================
+     |            ENCODER              |
+     |                                 |
+     |  +----------+  +----------+  +----------+
+     |  | ConvBlock|->| ConvBlock|->| ConvBlock|
+     |  |   64ch   |  |  128ch   |  |  256ch   |
+     |  +----+-----+  +----+-----+  +----+-----+
+     |       |e0           |e1           |e2
+     |       |             |             |
+     |  [MaxPool2d]   [MaxPool2d]   [AvgPool2d]
+     |   140x124       70x62         35x31
+     =================|=================
+                      |
+     =================|=================
+     |           BOTTLENECK            |
+     |                                 |
+     |      +-------------------+      |
+     |      |     ConvBlock     |      |
+     |      |      256ch        |      |
+     |      +---------+---------+      |
+     |                |                |
+     |      +---------v---------+      |
+     |      |      ConvGRU      |<--+  |
+     |      |    256 hidden     |   |  |
+     |      +---------+---------+   |  |
+     |                |             |  |
+     |                +--[x16 autoregressive steps]
+     |                                 |
+     =================|=================
+                      |
+     =================|=================
+     |            DECODER              |
+     |         (U-Net style)           |
+     |                                 |
+     |  +----------+  +----------+  +----------+
+     |  | ConvBlock|<-| ConvBlock|<-| ConvBlock|
+     |  |   32ch   |  |   64ch   |  |  128ch   |
+     |  +----+-----+  +----+-----+  +----+-----+
+     |       ^             ^             ^
+     |       |             |             |
+     |       +----[skip e0]+---[skip e1]-+--[skip e2]
+     |                                 |
+     =================|=================
+                      |
+                  OUTPUT HEAD
+                      |
+                      v
+                   OUTPUT
+        (Batch, 16 hours, 140, 124)
 ```
+
+**Key Design Decisions:**
+
+| Component | Choice | Rationale |
+|:---------:|:-------|:----------|
+| Encoder | 3-level ConvBlocks | Hierarchical spatial feature extraction |
+| Pooling | MaxPool + AvgPool | Max for features, Avg for smooth transitions |
+| Bottleneck | ConvGRU x16 | Autoregressive temporal modeling |
+| Decoder | U-Net skip connections | Preserve fine-grained spatial details |
+| Output | Residual prediction | `pred = last_frame + delta` for stability |
+| Normalization | GroupNorm | Batch-size independent, stable training |
+| Activation | GELU | Smooth gradients for regression |
 
 ---
 
 ## Training Strategy
 
-### Pure Quantile Refinement (PQR)
+### Progressive Fine-tuning Pipeline
 
-<div align="center">
+| Phase | Objective | Loss Function | Key Params | Score |
+|:-----:|:----------|:--------------|:-----------|:-----:|
+| 1 | Base training | MSE + Huber | LR=1e-3 | - |
+| 2 | Episode focus | Huber + Episode weighting | LR=1e-4 | 0.8768 |
+| 3 | Quantile targeting | Huber + Pinball(q=0.85) | LR=1e-5 | 0.8803 |
+| 4 | Pure quantile | 100% Pinball(q=0.85/0.90) | LR=1e-5 | Spike Expert |
 
-| Parameter | Value |
-|:---------:|:-----:|
-| Loss | 100% Pinball (q=0.85) |
-| Learning Rate | 1e-5 |
-| Epochs | 5 |
-| Early Stopping | Patience = 3 |
-| Batch Size | 4 |
+### Pinball Loss - The Key Innovation
 
-</div>
+Standard losses (MSE, MAE) penalize over/under-predictions equally. For episode forecasting, **under-prediction is worse** - missing a pollution spike has serious health implications.
 
-#### Why Pinball Loss at q=0.85?
-
+**Pinball Loss at quantile q:**
 ```
-Under-prediction penalty:  0.85 x |error|  ████████░░
-Over-prediction penalty:   0.15 x |error|  ██░░░░░░░░
+L(y, pred) = max(q * (y - pred), (q-1) * (y - pred))
 
-Asymmetry ratio: 5.67x
+For q = 0.85:
+  Under-prediction penalty: 0.85 x |error|
+  Over-prediction penalty:  0.15 x |error|
+  Asymmetry ratio: 5.67x
+  
+For q = 0.90:
+  Under-prediction penalty: 0.90 x |error|
+  Over-prediction penalty:  0.10 x |error|
+  Asymmetry ratio: 9.0x
 ```
 
-> This forces the model to **prefer over-prediction** for extreme values, directly optimizing for Episode SMAPE.
+This forces the model to **prefer over-prediction** for extreme values.
 
 ---
 
-## Master Blend Inference
+## Inference Pipeline
+
+### Master Blend Ensemble
+
+We combine two specialized models for robust predictions:
 
 ```
-                      ┌───────────────────┐
-                      │    Test Input     │
-                      │   (218 samples)   │
-                      └─────────┬─────────┘
-                                │
-                ┌───────────────┴───────────────┐
-                │                               │
-                ▼                               ▼
-       ┌─────────────────┐             ┌─────────────────┐
-       │  Stable Expert  │             │  Spike Expert   │
-       │    (Phase 2)    │             │     (PQR)       │
-       │  Score: 0.8768  │             │  Score: 0.8803  │
-       └────────┬────────┘             └────────┬────────┘
-                │                               │
-                │ x 0.30                        │ x 0.70
-                │                               │
-                └───────────────┬───────────────┘
-                                │
-                                ▼
-                       ┌─────────────────┐
-                       │      BLEND      │
-                       │   0.3S + 0.7P   │
-                       └────────┬────────┘
-                                │
-                                ▼
-                       ┌─────────────────┐
-                       │    CURVATURE    │
-                       │   CORRECTION    │
-                       │  (peaks >100)   │
-                       └────────┬────────┘
-                                │
-                                ▼
-                       ┌─────────────────┐
-                       │  Final Output   │
-                       │  [0.0, 6161.3]  │
-                       │   mean = 42.6   │
-                       └─────────────────┘
+                      Test Input
+                    (218 samples)
+                          |
+          +---------------+---------------+
+          |                               |
+          v                               v
+   +--------------+                +--------------+
+   |    STABLE    |                |    SPIKE     |
+   |    EXPERT    |                |    EXPERT    |
+   |   (Phase 2)  |                |    (PQR)     |
+   | Score: 0.8768|                |  Quantile-   |
+   | Global focus |                |   trained    |
+   +--------------+                +--------------+
+          |                               |
+          | x weight_stable               | x weight_spike
+          |                               |
+          +---------------+---------------+
+                          |
+                          v
+                   +--------------+
+                   |    BLEND     |
+                   +--------------+
+                          |
+                          v
+                   +--------------+
+                   |  CURVATURE   |
+                   |  CORRECTION  |
+                   | (peaks >100) |
+                   +--------------+
+                          |
+                          v
+                    Final Output
 ```
 
-### Curvature Correction Formula
+### Model Configurations
 
-```python
-stretch = 1 + (pred / 1000) ** 2
+| Model | Quantile | Blend Weights | Curvature | Score |
+|:------|:--------:|:-------------:|:---------:|:-----:|
+| **Top Model** | q=0.90 | 20% Stable + 80% Spike | 1+(p/800)^2 | **0.8834** |
+| Model 2 | q=0.85 | 30% Stable + 70% Spike | 1+(p/1000)^2 | 0.8825 |
+
+### Curvature Correction
+
+Non-linear post-processing to boost extreme predictions:
+
+```
+For predictions > 100 ug/m3:
+    stretch = 1 + (prediction / divisor)^2
+    corrected = prediction x stretch
 ```
 
-| Prediction | Correction | Boost |
-|:----------:|:----------:|:-----:|
-| 100 ug/m3  | x 1.01     | +1%   |
-| 300 ug/m3  | x 1.09     | +9%   |
-| 500 ug/m3  | x 1.25     | +25%  |
-| 1000 ug/m3 | x 2.00     | +100% |
-
----
-
-## Input Features
-
-<div align="center">
-
-### 16 Channels = 13 Base + 3 Engineered
-
-</div>
-
-| Category | Features | Count |
-|:--------:|:---------|:-----:|
-| **Target** | `cpm25` (Chemical PM2.5) | 1 |
-| **Meteorological** | `q2` `t2` `pblh` `psfc` `swdown` `rain` | 6 |
-| **Wind** | `u10` `v10` | 2 |
-| **Emissions** | `PM25` `NOx` `SO2` `NH3` | 4 |
-| **Engineered** | `wind_speed` `hour_sin` `hour_cos` | 3 |
+| Prediction | Top Model (d=800) | Model 2 (d=1000) |
+|:----------:|:-----------------:|:----------------:|
+| 100 ug/m3  | x1.016 (+1.6%)    | x1.010 (+1.0%)   |
+| 300 ug/m3  | x1.141 (+14.1%)   | x1.090 (+9.0%)   |
+| 500 ug/m3  | x1.391 (+39.1%)   | x1.250 (+25.0%)  |
+| 800 ug/m3  | x2.000 (+100%)    | x1.640 (+64.0%)  |
 
 ---
 
 ## Results
 
+### Final Leaderboard Performance
+
 <div align="center">
 
-### Final Performance
+| Metric | Top Model | Model 2 |
+|:------:|:---------:|:-------:|
+| **Kaggle Score** | **0.8834** | 0.8825 |
+| Val Episode SMAPE | 0.1296 | 0.1131 |
+| Val Episode Corr | 0.9856 | 0.9865 |
 
-| Metric | Value |
-|:------:|:-----:|
-| **Kaggle Score** | **0.8825** |
-| Val Episode SMAPE | 0.1131 |
-| Val Episode Corr | 0.9865 |
+</div>
 
 ### Output Statistics
 
 | Property | Value |
-|:--------:|:-----:|
-| Shape | `(218, 140, 124, 16)` |
-| Range | `[0.0, 6161.3]` ug/m3 |
-| Mean | `42.6` ug/m3 |
-| Pixels Corrected | 11.37% |
+|:--------:|:------|
+| Shape | (218, 140, 124, 16) |
+| Samples | 218 test windows |
+| Grid | 140 x 124 spatial points |
+| Horizon | 16 hours forecast |
 
-</div>
+---
+
+## Repository Structure
+
+```
+Code4CleanAir/
+|
++-- README.md                        # This file
++-- EXECUTIVE_SUMMARY.md             # 2-page technical report
++-- LICENSE                          # ANRF Open License
+|
++-- greeshma.ipynb                   # Top model (Score: 0.8834)
+|   +-- Quantile: 0.90
+|   +-- Blend: 20% Stable + 80% Spike
+|   +-- Curvature: 1 + (p/800)^2
+|
++-- PM25_MasterBlend_Documented.ipynb  # Model 2 (Score: 0.8825)
+    +-- Quantile: 0.85
+    +-- Blend: 30% Stable + 70% Spike
+    +-- Curvature: 1 + (p/1000)^2
+```
+
+---
+
+## Input Features
+
+**16 Channels = 13 Base + 3 Engineered**
+
+| Category | Features | Description |
+|:--------:|:---------|:------------|
+| Target | `cpm25` | Chemical PM2.5 concentration |
+| Meteorological | `q2`, `t2`, `pblh`, `psfc`, `swdown`, `rain` | Humidity, temp, boundary layer, pressure, radiation, precipitation |
+| Wind | `u10`, `v10` | 10m wind components |
+| Emissions | `PM25`, `NOx`, `SO2`, `NH3` | Pollutant sources |
+| Engineered | `wind_speed`, `hour_sin`, `hour_cos` | Derived features |
 
 ---
 
@@ -241,14 +315,14 @@ numpy >= 1.24
 
 ## License
 
+This work is released under the **ANRF Open License** as part of the AI-SE Hack 2026 competition.
+
 <div align="center">
-
-**ANRF Open License**
-
-*AI-SE Hack 2026*
 
 ---
 
-Made for cleaner air
+**Team Code4CleanAir**  
+ANRF AI-SE Hack Phase 2 - Theme 2  
+April 2026
 
 </div>
