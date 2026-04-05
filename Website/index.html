@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Air Quality | Brutalist Matrix</title>
+    <title>AQI Matrix — Predicted Air Quality · India Cities</title>
+    <meta name="description" content="Real-time predicted air quality index for Indian cities — Delhi, Hyderabad, Chennai. Built for public awareness and executive GRAP directives.">
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,47 +17,113 @@
 
     <div class="cyber-frame">
         
-        <!-- VERTICAL NAV LEFT -->
-        <nav class="vertical-nav">
-            <div class="brand"></div>
-            <div class="city-selector">
-                <button class="city-btn active" data-city="delhi">DELHI</button>
-                <button class="city-btn" data-city="hyd">HYDERABAD</button>
-                <button class="city-btn" data-city="chen">CHENNAI</button>
+        <!-- VERTICAL NAV LEFT (Fix #1 + #8: sidebar improvement + branding) -->
+        <nav class="vertical-nav" aria-label="City navigation">
+            <!-- Branding strip -->
+            <div class="brand-strip">
+                <span class="brand-logo">AQI</span>
+                <span class="brand-sub">MATRIX</span>
             </div>
-            <button class="admin-open" id="open-admin-btn" title="Configuration">[CONFIG]</button>
+
+            <!-- CITIES label affordance -->
+            <div class="cities-label">CITIES</div>
+
+            <div class="city-selector" role="tablist" aria-label="Select city">
+                <button class="city-btn active" data-city="delhi" role="tab" aria-selected="true" aria-label="Select Delhi">
+                    <span class="city-dot" aria-hidden="true"></span>
+                    <span class="city-name">DELHI</span>
+                </button>
+                <button class="city-btn" data-city="hyd" role="tab" aria-selected="false" aria-label="Select Hyderabad">
+                    <span class="city-dot" aria-hidden="true"></span>
+                    <span class="city-name">HYD</span>
+                </button>
+                <button class="city-btn" data-city="chen" role="tab" aria-selected="false" aria-label="Select Chennai">
+                    <span class="city-dot" aria-hidden="true"></span>
+                    <span class="city-name">CHEN</span>
+                </button>
+            </div>
+
+            <!-- Config button (Fix #6: dimmed with lock icon, less inviting) -->
+            <button class="admin-open" id="open-admin-btn" title="Admin Configuration (Restricted)" aria-label="Open admin configuration panel">
+                <span class="lock-icon" aria-hidden="true">&#128274;</span>
+                <span class="admin-label">CFG</span>
+            </button>
         </nav>
 
-        <!-- CENTER CANVAS (Massive Typographic Focal Point) -->
-        <section class="master-canvas">
+        <!-- CENTER CANVAS -->
+        <section class="master-canvas" role="main">
             <div class="typography-layer">
+                <!-- AQI Number -->
                 <div class="pm-massive" id="pm-massive">000</div>
-                <div class="label-overlay">PM2.5 / PREDICTED</div>
+                <!-- Fix #3: Severity badge -->
+                <div class="severity-badge" id="severity-badge">&#8212;</div>
+                <!-- Fix #3: PM label with timestamp -->
+                <div class="label-overlay">PM2.5 / <span id="predicted-label">PREDICTED</span></div>
+                <!-- Fix #3: Mini AQI scale bar -->
+                <div class="aqi-scale-bar" aria-label="AQI scale">
+                    <div class="aqi-scale-track">
+                        <div class="aqi-seg good" title="Good 0-50"></div>
+                        <div class="aqi-seg satisfactory" title="Satisfactory 51-100"></div>
+                        <div class="aqi-seg moderate" title="Moderate 101-200"></div>
+                        <div class="aqi-seg poor" title="Poor 201-300"></div>
+                        <div class="aqi-seg severe" title="Severe 301-400"></div>
+                        <div class="aqi-seg hazardous" title="Hazardous 401-500"></div>
+                    </div>
+                    <div class="aqi-scale-labels">
+                        <span>GOOD</span>
+                        <span>SAT</span>
+                        <span>MOD</span>
+                        <span>POOR</span>
+                        <span>SEVERE</span>
+                        <span>HAZ</span>
+                    </div>
+                    <div class="aqi-marker-row">
+                        <div class="aqi-marker" id="aqi-marker" aria-label="Current AQI position on scale"></div>
+                    </div>
+                </div>
             </div>
             
             <header class="canvas-header">
-                <h1 id="city-title">DELHI</h1>
-                <div class="view-switch">
-                    <button class="view-btn active" data-view="general">PUBLIC</button>
-                    <button class="view-btn" data-view="authorities">EXEC</button>
+                <!-- Fix #8: City name + tagline in top left -->
+                <div class="header-city-block">
+                    <h1 id="city-title">DELHI</h1>
+                    <p class="header-tagline">Predicted Air Quality &middot; India</p>
+                </div>
+
+                <!-- Fix #2: Clear labeled toggle switch -->
+                <div class="view-toggle-wrap">
+                    <span class="toggle-context-label">View:</span>
+                    <div class="view-toggle" role="group" aria-label="Switch between public and executive view">
+                        <span class="toggle-label-side" id="lbl-public">PUBLIC</span>
+                        <button class="toggle-track" id="toggle-track" aria-checked="false" role="switch" aria-label="Toggle between Public and Executive view">
+                            <span class="toggle-thumb" id="toggle-thumb"></span>
+                        </button>
+                        <span class="toggle-label-side" id="lbl-exec">EXEC</span>
+                    </div>
                 </div>
             </header>
+
+            <!-- EXEC view timestamp (Fix #7) -->
+            <div class="exec-timestamp" id="exec-timestamp" style="display:none">
+                <span class="exec-ts-label">LAST UPDATED:</span>
+                <span id="exec-ts-value">&#8212;</span>
+            </div>
         </section>
 
-        <!-- RIGHT DATA PANEL (Frameless Editorial Lists) -->
-        <aside class="data-panel">
+        <!-- RIGHT DATA PANEL -->
+        <aside class="data-panel" aria-label="Data panel">
             <div class="panel-section">
                 <h3 class="panel-title">IMPACT VECTORS</h3>
                 <div class="line-divider"></div>
-                <ul class="editorial-list block-list" id="personas-list">
+                <ul class="editorial-list block-list" id="personas-list" role="list">
                     <!-- Populated by JS -->
                 </ul>
             </div>
 
             <div class="panel-section alerts-container" id="alerts-container">
-                <h3 class="panel-title" id="alerts-title">SYSTEM ALERTS</h3>
+                <h3 class="panel-title" id="alerts-title">PUBLIC HEALTH ADVISORY</h3>
                 <div class="line-divider"></div>
-                <ul class="editorial-list" id="alerts-list">
+                <ul class="editorial-list" id="alerts-list" role="list">
                      <!-- Populated by JS -->
                 </ul>
             </div>
@@ -64,30 +131,69 @@
 
     </div>
 
-    <!-- Minimalist Configuration Modal -->
-    <div class="cyber-modal" id="admin-modal">
+    <!-- PIN Gate Modal (Fix #6) -->
+    <div class="cyber-modal" id="pin-modal" role="dialog" aria-modal="true" aria-labelledby="pin-modal-title">
+        <div class="modal-content pin-modal-content">
+            <header class="modal-header">
+                <h2 id="pin-modal-title">&#128274; RESTRICTED ACCESS</h2>
+                <button class="close-btn" id="close-pin-btn" aria-label="Close PIN dialog">&#215;</button>
+            </header>
+            <p class="pin-instructions">Enter admin PIN to access the configuration panel.</p>
+            <div class="pin-input-row">
+                <input type="password" id="pin-input" maxlength="6" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="off" aria-label="Admin PIN">
+                <button class="cyber-btn pin-submit-btn" id="pin-submit-btn">ENTER</button>
+            </div>
+            <p class="pin-error" id="pin-error" aria-live="polite"></p>
+        </div>
+    </div>
+
+    <!-- Admin Configuration Modal (Fix #6, #9) -->
+    <div class="cyber-modal" id="admin-modal" role="dialog" aria-modal="true" aria-labelledby="admin-modal-title">
         <div class="modal-content">
             <header class="modal-header">
-                <h2>ADMIN</h2>
-                <button class="close-btn" id="close-admin-btn">×</button>
+                <h2 id="admin-modal-title">&#9881; ADMIN CONFIG</h2>
+                <button class="close-btn" id="close-admin-btn" aria-label="Close admin panel">&#215;</button>
             </header>
+            <p class="modal-subtitle">Override predicted AQI values (0-500). Data updates the live dashboard.</p>
             
             <div class="input-matrix">
                 <div class="input-line">
-                    <label>DELHI</label>
-                    <input type="number" id="input-delhi" placeholder="000">
+                    <label for="input-delhi">DELHI</label>
+                    <div class="input-wrap">
+                        <input type="number" id="input-delhi" placeholder="000" min="0" max="500" aria-label="Delhi AQI value">
+                        <span class="validation-msg" id="val-delhi"></span>
+                    </div>
                 </div>
                 <div class="input-line">
-                    <label>HYDERABAD</label>
-                    <input type="number" id="input-hyd" placeholder="000">
+                    <label for="input-hyd">HYDERABAD</label>
+                    <div class="input-wrap">
+                        <input type="number" id="input-hyd" placeholder="000" min="0" max="500" aria-label="Hyderabad AQI value">
+                        <span class="validation-msg" id="val-hyd"></span>
+                    </div>
                 </div>
                 <div class="input-line">
-                    <label>CHENNAI</label>
-                    <input type="number" id="input-chen" placeholder="000">
+                    <label for="input-chen">CHENNAI</label>
+                    <div class="input-wrap">
+                        <input type="number" id="input-chen" placeholder="000" min="0" max="500" aria-label="Chennai AQI value">
+                        <span class="validation-msg" id="val-chen"></span>
+                    </div>
                 </div>
             </div>
 
-            <button id="save-data-btn" class="cyber-btn">COMMIT // OVERRIDE</button>
+            <!-- Fix #9: disable button until valid, Fix #6: confirmation step -->
+            <button id="save-data-btn" class="cyber-btn" disabled aria-disabled="true">COMMIT // OVERRIDE</button>
+        </div>
+    </div>
+
+    <!-- Confirmation Dialog (Fix #6) -->
+    <div class="cyber-modal" id="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+        <div class="modal-content confirm-modal-content">
+            <h2 id="confirm-modal-title">&#9888; CONFIRM OVERRIDE</h2>
+            <p id="confirm-msg" class="confirm-msg"></p>
+            <div class="confirm-btns">
+                <button class="cyber-btn confirm-yes" id="confirm-yes-btn">YES, OVERRIDE</button>
+                <button class="cyber-btn confirm-no" id="confirm-no-btn">CANCEL</button>
+            </div>
         </div>
     </div>
 
