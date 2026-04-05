@@ -74,58 +74,62 @@ Phase 4: Pure Quantile (PQR)  -->  "Spike Expert" for extremes
 A hybrid encoder-decoder architecture combining **U-Net** spatial processing with **ConvGRU** temporal dynamics.
 
 ```
-                    INPUT
-     (Batch, 16 channels, 10 hours, 140, 124)
-                      |
-     =================|=================
-     |            ENCODER              |
-     |                                 |
-     |  +----------+  +----------+  +----------+
-     |  | ConvBlock|->| ConvBlock|->| ConvBlock|
-     |  |   64ch   |  |  128ch   |  |  256ch   |
-     |  +----+-----+  +----+-----+  +----+-----+
-     |       |e0           |e1           |e2
-     |       |             |             |
-     |  [MaxPool2d]   [MaxPool2d]   [AvgPool2d]
-     |   140x124       70x62         35x31
-     =================|=================
-                      |
-     =================|=================
-     |           BOTTLENECK            |
-     |                                 |
-     |      +-------------------+      |
-     |      |     ConvBlock     |      |
-     |      |      256ch        |      |
-     |      +---------+---------+      |
-     |                |                |
-     |      +---------v---------+      |
-     |      |      ConvGRU      |<--+  |
-     |      |    256 hidden     |   |  |
-     |      +---------+---------+   |  |
-     |                |             |  |
-     |                +--[x16 autoregressive steps]
-     |                                 |
-     =================|=================
-                      |
-     =================|=================
-     |            DECODER              |
-     |         (U-Net style)           |
-     |                                 |
-     |  +----------+  +----------+  +----------+
-     |  | ConvBlock|<-| ConvBlock|<-| ConvBlock|
-     |  |   32ch   |  |   64ch   |  |  128ch   |
-     |  +----+-----+  +----+-----+  +----+-----+
-     |       ^             ^             ^
-     |       |             |             |
-     |       +----[skip e0]+---[skip e1]-+--[skip e2]
-     |                                 |
-     =================|=================
-                      |
-                  OUTPUT HEAD
-                      |
-                      v
-                   OUTPUT
-        (Batch, 16 hours, 140, 124)
++----------------------------------------------------------+
+|                          INPUT                           |
+|          (Batch, 16 channels, 10 hours, 140, 124)        |
++------------------------------+---------------------------+
+                               |
+                               v
++----------------------------------------------------------+
+|                         ENCODER                          |
+|                                                          |
+|    [ConvBlock 64] --> [ConvBlock 128] --> [ConvBlock 256]|
+|          |                  |                  |         |
+|      MaxPool2d          MaxPool2d          AvgPool2d     |
+|      140x124             70x62              35x31        |
+|          |                  |                  |         |
+|         e0                 e1                 e2         |
+|   (skip connection)  (skip connection)  (skip connection)|
++------------------------------+---------------------------+
+                               |
+                               v
++----------------------------------------------------------+
+|                       BOTTLENECK                         |
+|                                                          |
+|                     [ConvBlock 256]                      |
+|                           |                              |
+|                           v                              |
+|                   +---------------+                      |
+|                   |    ConvGRU    |----+                 |
+|                   |  256 hidden   |    | x16 steps       |
+|                   +---------------+<---+                 |
+|                           |        (autoregressive)      |
++------------------------------+---------------------------+
+                               |
+                               v
++----------------------------------------------------------+
+|                        DECODER                           |
+|                     (U-Net style)                        |
+|                                                          |
+|    [ConvBlock 32] <-- [ConvBlock 64] <-- [ConvBlock 128] |
+|          ^                  ^                  ^         |
+|          |                  |                  |         |
+|       +--+------------------+------------------+         |
+|       |        Skip Connections from Encoder             |
+|       |            (e0, e1, e2 features)                 |
++------------------------------+---------------------------+
+                               |
+                               v
++----------------------------------------------------------+
+|                       OUTPUT HEAD                        |
+|              Conv2d -> GroupNorm -> GELU -> Conv2d       |
++------------------------------+---------------------------+
+                               |
+                               v
++----------------------------------------------------------+
+|                         OUTPUT                           |
+|               (Batch, 16 hours, 140, 124)                |
++----------------------------------------------------------+
 ```
 
 **Key Design Decisions:**
@@ -183,56 +187,56 @@ This forces the model to **prefer over-prediction** for extreme values.
 We combine two specialized models for robust predictions:
 
 ```
-                      Test Input
-                    (218 samples)
-                          |
-          +---------------+---------------+
-          |                               |
-          v                               v
-   +--------------+                +--------------+
-   |    STABLE    |                |    SPIKE     |
-   |    EXPERT    |                |    EXPERT    |
-   |   (Phase 2)  |                |    (PQR)     |
-   | Score: 0.8768|                |  Quantile-   |
-   | Global focus |                |   trained    |
-   +--------------+                +--------------+
-          |                               |
-          | x weight_stable               | x weight_spike
-          |                               |
-          +---------------+---------------+
-                          |
-                          v
-                   +--------------+
-                   |    BLEND     |
-                   +--------------+
-                          |
-                          v
-                   +--------------+
-                   |  CURVATURE   |
-                   |  CORRECTION  |
-                   | (peaks >100) |
-                   +--------------+
-                          |
-                          v
-                    Final Output
++----------------------------------------------------------+
+|                       TEST INPUT                         |
+|                      (218 samples)                       |
++---------------------------+------------------------------+
+                            |
+            +---------------+---------------+
+            |                               |
+            v                               v
++------------------------+     +------------------------+
+|      STABLE EXPERT     |     |      SPIKE EXPERT      |
+|       (Phase 2)        |     |        (PQR)           |
+|                        |     |                        |
+|   Score: 0.8768        |     |   Quantile-trained     |
+|   Global accuracy      |     |   Episode-focused      |
++------------------------+     +------------------------+
+            |                               |
+            | x weight_stable               | x weight_spike
+            |                               |
+            +---------------+---------------+
+                            |
+                            v
++----------------------------------------------------------+
+|                         BLEND                            |
+|         final = weight_stable * S + weight_spike * P     |
++---------------------------+------------------------------+
+                            |
+                            v
++----------------------------------------------------------+
+|                   CURVATURE CORRECTION                   |
+|                                                          |
+|   For predictions > 100 ug/m3:                           |
+|       stretch = 1 + (prediction / divisor)^2             |
+|       corrected = prediction x stretch                   |
++---------------------------+------------------------------+
+                            |
+                            v
++----------------------------------------------------------+
+|                      FINAL OUTPUT                        |
+|                  (218, 140, 124, 16)                     |
++----------------------------------------------------------+
 ```
 
 ### Model Configurations
 
-| Model | Quantile | Blend Weights | Curvature | Score |
-|:------|:--------:|:-------------:|:---------:|:-----:|
-| **Top Model** | q=0.90 | 20% Stable + 80% Spike | 1+(p/800)^2 | **0.8834** |
-| Model 2 | q=0.85 | 30% Stable + 70% Spike | 1+(p/1000)^2 | 0.8825 |
+| Model | Quantile | Blend Weights | Curvature Divisor | Score |
+|:------|:--------:|:-------------:|:-----------------:|:-----:|
+| **Top Model** | q=0.90 | 20% Stable + 80% Spike | d=800 | **0.8834** |
+| Model 2 | q=0.85 | 30% Stable + 70% Spike | d=1000 | 0.8825 |
 
-### Curvature Correction
-
-Non-linear post-processing to boost extreme predictions:
-
-```
-For predictions > 100 ug/m3:
-    stretch = 1 + (prediction / divisor)^2
-    corrected = prediction x stretch
-```
+### Curvature Correction Effect
 
 | Prediction | Top Model (d=800) | Model 2 (d=1000) |
 |:----------:|:-----------------:|:----------------:|
