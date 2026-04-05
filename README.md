@@ -2,6 +2,7 @@
    PM2.5 Pollution Forecasting 
 </h1>
 
+
 <div align="center">
 
 **Episode-Aware Air Quality Prediction using Dual-Expert Ensemble**
@@ -273,19 +274,21 @@ We combine two specialized models for robust predictions:
 ```
 Code4CleanAir/
 |
-+-- README.md                        # This file
-+-- EXECUTIVE_SUMMARY.md             # 2-page technical report
-+-- LICENSE                          # ANRF Open License
++-- README.md                    # This file
++-- EXECUTIVE_SUMMARY.md         # 2-page technical report
++-- LICENSE                      # ANRF Open License
 |
-+-- greeshma.ipynb                   # Top model (Score: 0.8834)
-|   +-- Quantile: 0.90
-|   +-- Blend: 20% Stable + 80% Spike
-|   +-- Curvature: 1 + (p/800)^2
++-- models/
+|   |
+|   +-- top-model/               # Best model (Score: 0.8834)
+|   |   +-- README.md            # Model configuration details
+|   |   +-- greeshma.ipynb       # Training & inference notebook
+|   |
+|   +-- model-2/                 # Secondary model (Score: 0.8825)
+|       +-- README.md            # Model configuration details
+|       +-- PM25_MasterBlend_Documented.ipynb
 |
-+-- PM25_MasterBlend_Documented.ipynb  # Model 2 (Score: 0.8825)
-    +-- Quantile: 0.85
-    +-- Blend: 30% Stable + 70% Spike
-    +-- Curvature: 1 + (p/1000)^2
++-- aisehack-theme-2/            # Competition dataset
 ```
 
 ---
