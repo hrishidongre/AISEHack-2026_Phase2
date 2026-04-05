@@ -1,6 +1,6 @@
-<div align="center", fontsize = 25> 
+<h1 align="center"> 
   # PM2.5 Pollution Forecasting 
-</div>
+</h1>
 
 <div align="center">
 
