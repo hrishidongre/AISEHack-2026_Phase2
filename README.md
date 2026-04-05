@@ -1,4 +1,4 @@
-<div align="center"> 
+<div align="center", fontsize = 25> 
   # PM2.5 Pollution Forecasting 
 </div>
 
