@@ -269,26 +269,78 @@ We combine two specialized models for robust predictions:
 
 ---
 
+## Usage
+
+### Loading Models from Kaggle
+
+Our trained models are available on Kaggle Models:
+
+| Model | Kaggle Link | Score |
+|:------|:------------|:-----:|
+| **Top Model** | [greeshmasharma/resgruunet](https://www.kaggle.com/models/greeshmasharma/resgruunet/) | **0.8834** |
+| Model 2 | [kaori02/aisehack2026-2](https://www.kaggle.com/models/kaori02/aisehack2026-2) | 0.8825 |
+
+### Quick Start (Kaggle Notebook)
+
+**Step 1:** Add the model as input to your Kaggle notebook
+
+```
+Input -> Add Input -> Models -> Search "greeshmasharma/resgruunet"
+```
+
+**Step 2:** Load the model checkpoint
+
+```python
+import torch
+
+# Load Top Model
+checkpoint_path = '/kaggle/input/resgruunet/pytorch/default/1/best_pqr_finetune.pt'
+checkpoint = torch.load(checkpoint_path, map_location='cuda', weights_only=True)
+
+# Initialize model architecture
+model = ResGRUUNet(Config)
+model.load_state_dict(checkpoint['model_state_dict'])
+model.eval()
+```
+
+**Step 3:** Run inference
+
+```python
+# Prepare input: (Batch, 16 channels, 10 hours, 140, 124)
+with torch.no_grad():
+    pred_log = model(input_tensor, last_frame_log)
+    pred_raw = torch.relu(torch.expm1(pred_log.clamp(max=15)))
+```
+
+For complete inference with Master Blend and Curvature Correction, refer to the notebooks in the `models/` folder.
+
+---
+
 ## Repository Structure
 
 ```
-Code4CleanAir/
+AISEHack-2026/
 |
 +-- README.md                    # This file
-+-- EXECUTIVE_SUMMARY.md         # 2-page technical report
-+-- LICENSE                      # ANRF Open License
++-- LICENSE.md                   # ANRF Open License
++-- GENAI_WORKFLOW_LOG.md        # GenAI workflow documentation
 |
 +-- models/
 |   |
-|   +-- top-model/               # Best model (Score: 0.8834)
+|   +-- model-1/                 # Best model (Score: 0.8834)
 |   |   +-- README.md            # Model configuration details
-|   |   +-- greeshma.ipynb       # Training & inference notebook
+|   |   +-- Code4CleanAir Model 1.ipynb
 |   |
 |   +-- model-2/                 # Secondary model (Score: 0.8825)
 |       +-- README.md            # Model configuration details
-|       +-- PM25_MasterBlend_Documented.ipynb
+|       +-- Code4CleanAir Model 2.ipynb
 |
-+-- aisehack-theme-2/            # Competition dataset
++-- input_model/                 # Previous version checkpoints
+|   +-- res-1.ipynb              # Base ResGRU-UNet training
+|   +-- res-1fine.ipynb          # Fine-tuning iteration
+|   +-- res1-fine-quantile.ipynb # Quantile loss fine-tuning
+|
++-- Website/                     # Project website
 ```
 
 ---
